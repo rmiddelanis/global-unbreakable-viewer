@@ -1,0 +1,5 @@
+.DS_Store
+
+# Raw model outputs (input to build_data.py). Large; kept out of git.
+# The generated data/explorer_data.json is committed so the site works without it.
+simulation_data/
