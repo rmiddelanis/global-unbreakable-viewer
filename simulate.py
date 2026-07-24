@@ -123,15 +123,8 @@ def build_settings(outdir: str, num_cores: int, series: dict | None = None, para
     return s
 
 
-def infeasible_isos_from_prepare(outdir: str) -> set:
-    """ISOs whose q1 scale_total redistribution drove v or fa negative during preparation."""
-    hr = pd.read_csv(os.path.join(outdir, "model_inputs", "scenario__hazard_ratios.csv"))
-    bad = hr[(hr["v"] < 0) | (hr["fa"] < 0)]
-    return set(bad["iso3"].unique())
-
-
 def drop_isos_from_inputs(outdir: str, isos: set) -> None:
-    """Remove infeasible ISOs from the prepared model_inputs so run_model skips them."""
+    """Remove ISOs from the prepared model_inputs so run_model skips them (-> null in the JSON)."""
     inputs = os.path.join(outdir, "model_inputs")
     for fname in ("scenario__hazard_ratios.csv", "scenario__macro.csv", "scenario__cat_info.csv",
                   "scenario__hazard_protection.csv", "data_coverage.csv"):
@@ -143,18 +136,49 @@ def drop_isos_from_inputs(outdir: str, isos: set) -> None:
             df[~df["iso3"].isin(isos)].to_csv(p, index=False)
 
 
+def resolve_q1_feasibility(outdir: str) -> set:
+    """Per-HAZARD feasibility handling for q1 scale_total runs.
+
+    Scaling total exposure/vulnerability by moving only the poorest quintile drives a hazard's q1 fa/v
+    negative once the requested cut exceeds that quintile's share of the hazard. Handle it per hazard,
+    not per country:
+      * a hazard is INFEASIBLE for a country if any poorest-quintile row would go < 0;
+      * if EVERY hazard of a country is infeasible -> DROP the country (null; the frontend clamps the
+        slider width there — the policy can no longer do anything);
+      * otherwise KEEP it and CLAMP the infeasible rows' fa/v (and v_ew) to their physical floor of 0,
+        so the feasible hazard(s) still scale with the slider while saturated ones sit at 0.
+    Rewrites the prepared inputs in place; returns the dropped ISOs."""
+    hr_path = os.path.join(outdir, "model_inputs", "scenario__hazard_ratios.csv")
+    hr = pd.read_csv(hr_path)
+    neg = (hr["fa"] < 0) | (hr["v"] < 0)
+    if not neg.any():
+        return set()
+    bad_haz = hr.loc[neg].groupby("iso3")["hazard"].agg(set)   # hazards with >=1 infeasible q1 row
+    all_haz = hr.groupby("iso3")["hazard"].agg(set)
+    dropped = {iso for iso, bh in bad_haz.items() if bh == all_haz[iso]}   # every hazard infeasible
+    keep = ~hr["iso3"].isin(dropped)
+    clamped = sorted(hr.loc[neg & keep, "iso3"].unique())
+    cols = [c for c in ("fa", "v", "v_ew") if c in hr.columns]
+    hr.loc[keep, cols] = hr.loc[keep, cols].clip(lower=0)   # clamp infeasible rows to the 0 floor
+    hr.to_csv(hr_path, index=False)
+    if clamped:
+        print(f"         clamped q1 to feasible floor for {len(clamped)} countries "
+              f"{clamped[:8]}{'…' if len(clamped) > 8 else ''}", flush=True)
+    if dropped:
+        drop_isos_from_inputs(outdir, dropped)
+    return dropped
+
+
 def run_scenario(paper_root: str, settings: dict, outdir: str, is_q1: bool = False) -> set:
-    """Run one scenario (baseline or a policy step) over all countries. Returns dropped infeasible ISOs
-    (only for q1-scope policy runs)."""
+    """Run one scenario (baseline or a policy step) over all countries. Returns dropped ISOs (only for
+    q1-scope runs, where every hazard is infeasible)."""
     if os.path.exists(outdir):
         shutil.rmtree(outdir)
     settings_file = _write_settings(settings, outdir)
     run_model_step(paper_root, RUN_PREPARE, settings_file)
     dropped = set()
     if is_q1:
-        dropped = infeasible_isos_from_prepare(outdir)
-        if dropped:
-            drop_isos_from_inputs(outdir, dropped)
+        dropped = resolve_q1_feasibility(outdir)
     run_model_step(paper_root, RUN_MODEL, settings_file)
     return dropped
 
