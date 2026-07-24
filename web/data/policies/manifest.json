@@ -1,0 +1,85 @@
+{
+ "method": "table",
+ "outputs": [
+  "riskAssets",
+  "riskConsumption",
+  "riskWellbeing",
+  "resilience",
+  "recovery"
+ ],
+ "levers": [
+  {
+   "key": "vulnerability",
+   "label": "Reduce total vulnerability",
+   "kind": "scale",
+   "series": {
+    "all": "vulnerability_all",
+    "q1": "vulnerability_q1"
+   },
+   "scopes": [
+    "all",
+    "q1"
+   ]
+  },
+  {
+   "key": "exposure",
+   "label": "Reduce total exposure",
+   "kind": "scale",
+   "series": {
+    "all": "exposure_all",
+    "q1": "exposure_q1"
+   },
+   "scopes": [
+    "all",
+    "q1"
+   ]
+  },
+  {
+   "key": "self_employment",
+   "label": "Reduce self-employment",
+   "kind": "scale",
+   "series": {
+    "all": "self_employment"
+   },
+   "scopes": [
+    "all"
+   ]
+  },
+  {
+   "key": "non_diversified_income",
+   "label": "Diversify income",
+   "kind": "scale",
+   "series": {
+    "all": "non_diversified_income"
+   },
+   "scopes": [
+    "all"
+   ]
+  },
+  {
+   "key": "gini",
+   "label": "Reduce income inequality",
+   "kind": "scale",
+   "series": {
+    "all": "gini"
+   },
+   "scopes": [
+    "all"
+   ]
+  },
+  {
+   "key": "pds",
+   "label": "Disaster aid",
+   "kind": "pds",
+   "variants": {
+    "uniform": "pds_uniform",
+    "proportional": "pds_proportional"
+   },
+   "variantLabels": {
+    "uniform": "Post-disaster support",
+    "proportional": "Insurance"
+   }
+  }
+ ],
+ "note": "Pre-computed single-policy scenarios (one lever at a time) from full model runs; the frontend does a table lookup. Extensible to per-country emulators (method)."
+}

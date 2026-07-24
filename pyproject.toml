@@ -1,0 +1,17 @@
+[project]
+name = "global-unbreakable-viewer"
+version = "0.1.0"
+description = "Data pipeline (simulate + process) for the Global Resilience Explorer."
+requires-python = ">=3.10"
+# Dependencies of the SIMULATE (outer orchestration) and PROCESS stages only. The model itself runs
+# in the submodule's own environment (unbreakable-core==0.1.2, py3.11) — bootstrap that separately with
+#   uv sync --directory external/UB-global-socioeconomic-resilience
+dependencies = [
+    "numpy",
+    "pandas",
+    "pyyaml",
+]
+
+[tool.uv]
+# This project is a set of scripts (simulate.py / process.py), not an importable/installable package.
+package = false

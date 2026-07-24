@@ -1,5 +1,18 @@
 .DS_Store
+.Rhistory
 
-# Raw model outputs (input to build_data.py). Large; kept out of git.
-# The generated data/explorer_data.json is committed so the site works without it.
-simulation_data/
+# --- produce → process boundary: raw model outputs (large, regenerable via simulate.py).
+# Not committed; process.py distils them into web/data/, which IS committed so the site works standalone.
+simulation_output/
+
+# --- model submodule (build-time dependency for simulate.py). Kept ignored so a stray clone can't be
+# tracked by accident; when wiring it, add with:  git submodule add -f <url> external/UB-...
+external/
+
+# --- Python (uv) ---
+.venv/
+__pycache__/
+
+# --- web build artifact + deps (app.js is generated from web/src/app.jsx by `npm run build`) ---
+web/app.js
+web/node_modules/

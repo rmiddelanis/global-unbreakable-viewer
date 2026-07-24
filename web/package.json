@@ -1,0 +1,12 @@
+{
+  "name": "global-unbreakable-viewer-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Static globe frontend for the Global Resilience Explorer. `npm run build` transpiles + minifies src/app.jsx into app.js (loaded by index.html as a plain script).",
+  "scripts": {
+    "build": "esbuild src/app.jsx --jsx=transform --jsx-factory=React.createElement --jsx-fragment=React.Fragment --minify --target=es2018 --banner:js=\"/* Generated from src/app.jsx by npm run build — edit the .jsx source, not this file. */\" --outfile=app.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0"
+  }
+}
