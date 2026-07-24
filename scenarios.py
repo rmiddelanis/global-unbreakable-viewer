@@ -73,7 +73,7 @@ SERIES = {
                                "scope": "all", "identity": 1.0, "display": "reduction",
                                "params": _round_grid(0.50, 0.98, 0.02)[::-1]},
     "gini": {"kind": "scale", "measure": "scale_gini_index", "scope": None,
-             "identity": 1.0, "display": "reduction", "params": _round_grid(0.0, 0.95, 0.05)[::-1]},
+             "identity": 1.0, "display": "reduction", "params": _round_grid(0.50, 0.98, 0.02)[::-1]},
     "pds_uniform": {"kind": "pds", "variant": "uniform:0.2", "identity": 0.0, "display": "share",
                     "params": _round_grid(0.05, 0.75, 0.05)},
     "pds_proportional": {"kind": "pds", "variant": "proportional", "identity": 0.0, "display": "share",
