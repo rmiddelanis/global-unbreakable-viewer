@@ -1,5 +1,6 @@
 .DS_Store
 .Rhistory
+.idea
 
 # --- produce → process boundary: raw model outputs (large, regenerable via simulate.py).
 # Not committed; process.py distils them into web/data/, which IS committed so the site works standalone.

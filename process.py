@@ -306,7 +306,7 @@ def build_baseline():
     diffs = validate_country_level(results, iah, macro, protection)
     print("Validation (max relative error vs results.csv):")
     for k, v in diffs.items():
-        flag = "OK" if v < 0.01 else "WARN"
+        flag = "OK" if v < 0.0001 else "WARN"
         print(f"  {k:20s} {v:.3e}  [{flag}]")
 
     quint = build_quintiles(iah, results, protection)

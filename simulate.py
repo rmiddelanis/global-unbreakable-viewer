@@ -3,11 +3,13 @@
 simulate.py — PRODUCTION stage: run the disaster-resilience model to produce the raw outputs the
 viewer needs.
 
-This is the viewer-tailored analogue of the model's ``reproduce_results.py``: for the BASELINE and for
-each single-policy sweep it writes a model ``settings.yml`` and drives the model's two entry points
-(``run_prepare`` → ``unbreakable.model.run_model``) as subprocesses. It is authored from scratch rather
-than importing ``reproduce_results`` (that module runs its whole reproduction pipeline on import). The
-scenario/lever definitions and the baseline settings live in ``scenarios.py``.
+This is the viewer-tailored analogue of the model's ``reproduce_results.py``. Every run — the baseline
+AND each single-policy sweep step — is the same kind of job: write a model ``settings.yml`` and drive
+the model's two entry points (``run_prepare`` → ``unbreakable.model.run_model``) as subprocesses. The
+baseline is simply the scenario with NO lever applied (and full observables); it flows through the
+exact same ``build_settings`` + ``run_scenario`` path as the policies. It is authored from scratch
+rather than importing ``reproduce_results`` (that module runs its whole pipeline on import). Scenario
+definitions and baseline settings live in ``scenarios.py``.
 
 The model itself is a separate uv project (the ``UB-global-socioeconomic-resilience`` repo, with
 ``unbreakable-core`` installed and its own ``data/processed``). We invoke it via
@@ -29,7 +31,6 @@ import argparse
 import os
 import shutil
 import subprocess
-import sys
 
 import pandas as pd
 
@@ -89,29 +90,24 @@ def _write_settings(settings: dict, outdir: str) -> str:
     return settings_file
 
 
-def baseline_settings(outdir: str, num_cores: int) -> dict:
-    """All levers neutral, PDS off, and NO observables restriction (the baseline must emit full
-    iah/macro so process.py can derive quintiles + recovery)."""
+def build_settings(outdir: str, num_cores: int, series: dict | None = None, param=None,
+                   observables: dict | None = None) -> dict:
+    """Settings for ONE scenario. `series=None` → the baseline (all levers neutral). One lever is moved
+    off-neutral otherwise. `observables` trims the written CSV columns for policy runs; the baseline
+    passes `observables=None` so it emits the FULL iah/macro that process.py needs for quintiles +
+    recovery. Mirrors reproduce_results.py by ASSIGNING a fresh policy dict (required for
+    scale_gini_index, which is not one of default_settings' neutral keys)."""
     s = default_settings(num_cores)
     s["scenario_params"]["run_params"]["countries"] = "all"
     s["model_params"]["outpath"] = outdir
     s["model_params"]["input_path"] = os.path.join(outdir, "model_inputs")
-    return s
+    if observables is not None:
+        s["model_params"]["observables"] = observables
 
-
-def policy_settings(series: dict, param, outdir: str, num_cores: int) -> dict:
-    """One lever moved off its neutral value; observables trimmed (policy runs need only results.csv)."""
-    s = default_settings(num_cores)
-    s["scenario_params"]["run_params"]["countries"] = "all"
-    s["model_params"]["outpath"] = outdir
-    s["model_params"]["input_path"] = os.path.join(outdir, "model_inputs")
-    s["model_params"]["observables"] = OBSERVABLES
+    if series is None:
+        return s  # baseline: no lever applied
 
     if series["kind"] == "scale":
-        # Assign a fresh policy dict (mirrors reproduce_results.py). This is required for
-        # scale_gini_index, which is NOT one of default_settings' neutral policy_params keys — so we
-        # must set it, not read-then-mutate an existing key. Behaviour is identical for the levers that
-        # do have a neutral default.
         pp = {"parameter": param}
         if series["scope"] is not None:
             pp["scope"] = Q1_SCOPE if series["scope"] == "q1" else ALL_SCOPE
@@ -147,21 +143,12 @@ def drop_isos_from_inputs(outdir: str, isos: set) -> None:
             df[~df["iso3"].isin(isos)].to_csv(p, index=False)
 
 
-# --------------------------------------------------------------------------------------
-def run_baseline(paper_root: str, num_cores: int) -> None:
-    if os.path.exists(BASELINE_DIR):
-        shutil.rmtree(BASELINE_DIR)
-    settings_file = _write_settings(baseline_settings(BASELINE_DIR, num_cores), BASELINE_DIR)
-    run_model_step(paper_root, RUN_PREPARE, settings_file)
-    run_model_step(paper_root, RUN_MODEL, settings_file)
-
-
-def run_policy_scenario(paper_root: str, series: dict, param, outdir: str, num_cores: int,
-                        is_q1: bool) -> set:
-    """Run one (series, param) over all countries. Returns the set of dropped (infeasible) ISOs."""
+def run_scenario(paper_root: str, settings: dict, outdir: str, is_q1: bool = False) -> set:
+    """Run one scenario (baseline or a policy step) over all countries. Returns dropped infeasible ISOs
+    (only for q1-scope policy runs)."""
     if os.path.exists(outdir):
         shutil.rmtree(outdir)
-    settings_file = _write_settings(policy_settings(series, param, outdir, num_cores), outdir)
+    settings_file = _write_settings(settings, outdir)
     run_model_step(paper_root, RUN_PREPARE, settings_file)
     dropped = set()
     if is_q1:
@@ -199,14 +186,12 @@ def main():
     print(f"Model repo: {paper_root}\nRunning via: uv run --directory {paper_root}")
     os.makedirs(SIM_OUT, exist_ok=True)
 
+    # One unified job list. The baseline is just the first scenario (no lever, full observables); every
+    # policy step is a scenario with one lever off-neutral and trimmed observables.
+    jobs = []  # (label, outdir, settings, is_q1)
     if do_baseline:
-        base_results = os.path.join(BASELINE_DIR, "simulation_outputs", "results.csv")
-        if os.path.exists(base_results) and not args.force:
-            print("[cached] baseline (use --force to re-run)")
-        else:
-            print(f"[run] baseline cores={args.num_cores}", flush=True)
-            run_baseline(paper_root, args.num_cores)
-
+        jobs.append(("baseline", BASELINE_DIR,
+                     build_settings(BASELINE_DIR, args.num_cores), False))
     for sid in series_to_run:
         series = SERIES[sid]
         is_q1 = series.get("scope") == "q1"
@@ -214,19 +199,23 @@ def main():
         params = series["params"][:args.limit] if args.limit else series["params"]
         for param in params:
             outdir = os.path.join(SIM_OUT, sid, scope_folder, str(param))
-            res_csv = os.path.join(outdir, "simulation_outputs", "results.csv")
-            if os.path.exists(res_csv) and not args.force:
-                print(f"  [cached] {sid} {param}")
-                continue
-            print(f"  [run] {sid} param={param} cores={args.num_cores}", flush=True)
-            try:
-                dropped = run_policy_scenario(paper_root, series, param, outdir, args.num_cores, is_q1)
-            except Exception as e:  # keep a long unattended batch going; a failed step retries next run
-                print(f"  [FAIL] {sid} {param}: {e}", flush=True)
-                continue
-            if dropped:
-                print(f"         dropped {len(dropped)} infeasible q1 countries: "
-                      f"{sorted(dropped)[:8]}{'…' if len(dropped) > 8 else ''}")
+            jobs.append((f"{sid} {param}", outdir,
+                         build_settings(outdir, args.num_cores, series, param, OBSERVABLES), is_q1))
+
+    for label, outdir, settings, is_q1 in jobs:
+        res_csv = os.path.join(outdir, "simulation_outputs", "results.csv")
+        if os.path.exists(res_csv) and not args.force:
+            print(f"  [cached] {label}")
+            continue
+        print(f"  [run] {label} cores={args.num_cores}", flush=True)
+        try:
+            dropped = run_scenario(paper_root, settings, outdir, is_q1)
+        except Exception as e:  # keep a long unattended batch going; a failed step retries next run
+            print(f"  [FAIL] {label}: {e}", flush=True)
+            continue
+        if dropped:
+            print(f"         dropped {len(dropped)} infeasible q1 countries: "
+                  f"{sorted(dropped)[:8]}{'…' if len(dropped) > 8 else ''}")
 
     print("Done. Raw outputs under simulation_output/. Next: uv run python process.py")
 
