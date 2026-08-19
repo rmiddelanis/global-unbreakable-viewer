@@ -15,10 +15,13 @@ guards against `scenarios.default_settings` drifting from the model's canonical 
   country in the world is simply not modelled.
 - All **132 simulated countries are shown coloured** on the globe. Countries not covered by the
   simulation render **grey** and are non-interactive (tooltip: *"Not covered by the simulation"*).
-- The prototype used the Natural Earth **110m** country set, which has **no polygon for 3 simulated
-  countries** — Comoros (`COM`), Malta (`MLT`), Mauritius (`MUS`). The explorer therefore uses the
-  vendored **50m** set (`web/data/ne_50m_admin_0_countries.json`), which covers all 132. Country
-  matching is by `ISO_A3` with fallbacks `ADM0_A3` → `ISO_A3_EH` → `SOV_A3`.
+- The globe uses the **World Bank GAD** country polygons vendored in `data/WB_shapes/simplified/`
+  (the same shapes as the paper's maps) and converted to `web/data/wb_adm0.json` /
+  `wb_borders.json` by `prepare_shapes.py`; all 132 simulated countries have a polygon. Country
+  matching is by the `iso3` property (WB `ISO_A3`). Disputed regions without an ISO code are
+  coloured following the paper's `get_special_map_colors` (claimant colors, 50/50 blends), and
+  boundary lines carry the WB `Style` linestyles (solid / dashed / dotted), pre-baked into the
+  border polylines.
 
 ## Present and wired up
 

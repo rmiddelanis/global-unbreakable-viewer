@@ -1,9 +1,24 @@
 
 const {useState,useEffect,useRef,useMemo} = React;
 
-const DATA_URL = './data/explorer_data.json';
-const GEO_URL  = './data/ne_50m_admin_0_countries.json';
-const GREY     = '#dde4ea';   // countries not covered by the simulation
+const DATA_URL    = './data/explorer_data.json';
+const GEO_URL     = './data/wb_adm0.json';      // WB GAD country polygons (built by prepare_shapes.py)
+const BORDERS_URL = './data/wb_borders.json';   // boundary + coastline lines, dash styles pre-baked
+const GREY        = '#dde4ea';   // countries not covered by the simulation
+
+/* map styling ported from the paper repo's plotting.py
+   (MAP_COLORS / BORDER_LINESTYLES / get_special_map_colors) */
+const COAST_COLOR  = '#4682b4';               // steelblue ocean line
+const BORDER_COLOR = 'rgba(255,255,255,0.9)'; // white boundary lines
+const ESH_COLOR    = '#c8c8c8';               // Western Sahara is always lightgrey
+const SPECIAL_REGIONS = {                     // disputed region -> countries whose colors it takes
+  'Aksai Chin':['CHN','IND'],
+  'Jammu and Kashmir':['IND'],
+  'Gilgit Baltistan':['PAK'],
+  'Arunachal Pradesh':['CHN','IND'],
+  'Abyei':['SSD','SDN'],
+  'Ilemi Triangle':['KEN','SSD'],
+};
 
 /* ============================ VARIABLES ============================
    All values arrive already scaled in explorer_data.json:
@@ -48,12 +63,14 @@ function quantile(sorted,p){
   return sorted[lo]+(sorted[hi]-sorted[lo])*(idx-lo);
 }
 
-/* resolve an ISO3 code from a Natural Earth feature */
-function featIso(p){
-  for(const k of ['ISO_A3','ADM0_A3','ISO_A3_EH','SOV_A3']){
-    const v=p[k]; if(v&&v!=='-99')return v;
-  }
-  return null;
+/* 50/50 blend of two css colors (hex or rgb()), like blend_colors in plotting.py */
+function parseColor(c){
+  if(c[0]==='#')return hx(c);
+  const m=c.match(/\d+(\.\d+)?/g);return m?m.slice(0,3).map(Number):[0,0,0];
+}
+function blendColors(c1,c2,t=.5){
+  const a=parseColor(c1),b=parseColor(c2);
+  return `rgb(${Math.round(a[0]+(b[0]-a[0])*t)},${Math.round(a[1]+(b[1]-a[1])*t)},${Math.round(a[2]+(b[2]-a[2])*t)})`;
 }
 
 /* ===================== POLICY LOOKUP (pre-computed single-policy scenarios) =====================
@@ -92,6 +109,7 @@ function adjustedMetrics(c,pol,manifest,active){
 /* ============================ APP ============================ */
 function App(){
   const [feats,setFeats]=useState(null);
+  const [paths,setPaths]=useState(null);        // boundary + coastline polylines (wb_borders.json)
   const [data,setData]=useState(null);          // explorer_data.json
   const [byIso,setByIso]=useState({});
   const [manifest,setManifest]=useState(null);  // data/policies/manifest.json (optional)
@@ -106,14 +124,15 @@ function App(){
   /* load simulation data + country polygons */
   useEffect(()=>{(async()=>{
     try{
-      const [dRes,gRes]=await Promise.all([fetch(DATA_URL),fetch(GEO_URL)]);
-      if(!dRes.ok)throw new Error('Could not load '+DATA_URL+' ('+dRes.status+')');
-      if(!gRes.ok)throw new Error('Could not load '+GEO_URL+' ('+gRes.status+')');
-      const d=await dRes.json(), g=await gRes.json();
+      const urls=[DATA_URL,GEO_URL,BORDERS_URL];
+      const res=await Promise.all(urls.map(u=>fetch(u)));
+      res.forEach((r,i)=>{if(!r.ok)throw new Error('Could not load '+urls[i]+' ('+r.status+')');});
+      const [d,g,bd]=await Promise.all(res.map(r=>r.json()));
       const bi={}; d.countries.forEach(c=>{bi[c.iso]=c;});
-      const fs=(g.features||[]).filter(f=>{const n=f.properties.NAME||f.properties.ADMIN;return n&&n!=='Antarctica';});
-      fs.forEach(f=>{const iso=featIso(f.properties); f.__c=iso?bi[iso]||null:null;});
-      setData(d);setByIso(bi);setFeats(fs);
+      const fs=g.features||[];
+      fs.forEach(f=>{const iso=f.properties.iso3; f.__c=iso?bi[iso]||null:null;});
+      const pd=(bd.borders||[]).map(pts=>({pts})).concat((bd.coast||[]).map(pts=>({pts,coast:true})));
+      setData(d);setByIso(bi);setFeats(fs);setPaths(pd);
       /* policy scenarios are optional: load the manifest if present, ignore if absent */
       fetch(POLICY_URL+'manifest.json').then(r=>r.ok?r.json():null).then(m=>setManifest(m)).catch(()=>{});
     }catch(e){setErr(e.message);}
@@ -142,6 +161,21 @@ function App(){
     return ramp(V.stops,scaleT(V.get(c)));
   };
 
+  /* per-feature color — port of get_special_map_colors (plotting.py): Western Sahara is a fixed
+     lightgrey; disputed regions take their single claimant's color, the shared color, or a 50/50
+     blend when the two claimants' colors differ (blended with white if only one is simulated). */
+  const featColor=(f)=>{
+    const p=f.properties||{};
+    if(p.iso3==='ESH')return ESH_COLOR;
+    const nbs=!f.__c&&SPECIAL_REGIONS[p.name];
+    if(nbs){
+      const cs=nbs.filter(i=>byIso[i]).map(i=>colorFor(byIso[i]));
+      if(cs.length===2)return cs[0]===cs[1]?cs[0]:blendColors(cs[0],cs[1]);
+      if(cs.length===1)return nbs.length===1?cs[0]:blendColors(cs[0],'#ffffff');
+    }
+    return colorFor(f.__c);
+  };
+
   /* init globe once feats ready */
   const hoverRef=useRef(null);
 
@@ -163,16 +197,23 @@ function App(){
   },[sel]);
 
   useEffect(()=>{
-    if(!feats||!elRef.current||wRef.current)return;
+    if(!feats||!paths||!elRef.current||wRef.current)return;
     const w=Globe()(elRef.current)
       .backgroundColor('rgba(0,0,0,0)')
       .showAtmosphere(true).atmosphereColor('#bcd6e8').atmosphereAltitude(0.20)
       .showGraticules(true)
       .polygonsData(feats)
       .polygonAltitude(f=>f===hoverRef.current?0.045:0.012)
-      .polygonCapColor(f=>colorFor(f.__c))
+      .polygonCapColor(f=>featColor(f))
       .polygonSideColor(()=>'rgba(120,140,160,0.10)')
-      .polygonStrokeColor(()=>'rgba(255,255,255,0.55)')
+      /* countries carry no outline of their own (ec='none' in the paper maps): the white
+         WB_GAD_Lines boundaries and the steelblue coastline are drawn as paths instead */
+      .polygonStrokeColor(()=>'rgba(0,0,0,0)')
+      .pathsData(paths)
+      .pathPoints(d=>d.pts).pathPointLat(pt=>pt[1]).pathPointLng(pt=>pt[0])
+      .pathPointAlt(0.0125)                         // just above the country caps
+      .pathColor(d=>d.coast?COAST_COLOR:BORDER_COLOR)
+      .pathTransitionDuration(0)
       .onPolygonHover(onHover)
       .onPolygonClick(f=>{if(f.__c)setSel(f.__c.iso);})
       .onGlobeClick(()=>{setSel(null);});
@@ -196,7 +237,7 @@ function App(){
     if(window.innerWidth<=820){tip.style.opacity=0;return;}   // no hover tooltip on mobile / touch
     if(f){
       tip.style.opacity=1;
-      const nm=f.properties.NAME_LONG||f.properties.NAME||f.properties.ADMIN||'';
+      const nm=f.properties.name||'';
       if(f.__c){const c=f.__c;const Vh=VARS[vkRef.current];
         tip.innerHTML=`<b>${c.name}</b><div class="meta">${c.incomeLabel} · ${c.regionLabel}</div>
           <div style="margin-top:4px">${Vh.label}: <span class="v">${Vh.fmt(Vh.get(c))}${Vh.unit==='%'?'%':' '+Vh.unit}</span></div>`;
@@ -210,7 +251,7 @@ function App(){
 
   /* recolor on variable / highlight change */
   useEffect(()=>{const w=wRef.current;if(!w)return;
-    w.polygonCapColor(f=>colorFor(f.__c));},[vk,domain,hiGroup,groupBy]);
+    w.polygonCapColor(f=>featColor(f));},[vk,domain,hiGroup,groupBy]);
 
   /* focus camera on selection */
   useEffect(()=>{const w=wRef.current;if(!w||!sel)return;const c=byIso[sel];if(!c)return;
