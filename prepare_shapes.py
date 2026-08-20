@@ -1,6 +1,7 @@
-"""Convert the vendored World Bank GAD shapefiles into the JSON assets served by web/.
+"""Convert the simplified World Bank GAD shapefiles into the JSON assets served by web/.
 
-Inputs (vendored copies from the paper repo's data/WB_shapes/simplified):
+Inputs (generated intermediates — run ./simplify_shapes.sh first, which topologically
+simplifies the raw WB Official Boundaries zips vendored in data/WB_shapes/raw/):
     data/WB_shapes/simplified/WB_GAD_ADM0_complete.shp   country + disputed-region polygons
     data/WB_shapes/simplified/WB_GAD_Lines.shp           international boundary lines (Style attribute)
     data/WB_shapes/simplified/WB_GAD_ocean_mask.shp      ocean polygon (land = bbox - ocean)
@@ -135,7 +136,6 @@ def write_adm0():
     print(f"wb_adm0.json: {len(features)} features, {os.path.getsize(path)/1e6:.2f} MB")
 
 
-MIN_COAST_RING = 1.0   # skip islets below this ring length (deg) to bound the object count
 FRAME = 180 - 1e-6     # |lng| at/beyond this is the antimeridian cut, not a real coastline
 
 
@@ -152,8 +152,6 @@ def coast_paths():
     paths = []
     for p in polys:
         for ring in [p.exterior, *p.interiors]:
-            if ring.length < MIN_COAST_RING:
-                continue
             # split the ring into runs of points off the antimeridian frame
             run = []
             for x, y in ring.coords:

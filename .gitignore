@@ -10,6 +10,10 @@ simulation_output/
 # tracked by accident; when wiring it, add with:  git submodule add -f <url> external/UB-...
 external/
 
+# --- generated intermediate: simplified shapefiles (regenerate from data/WB_shapes/raw/
+# via ./simplify_shapes.sh; consumed by prepare_shapes.py) ---
+data/WB_shapes/simplified/
+
 # --- Python (uv) ---
 .venv/
 __pycache__/
