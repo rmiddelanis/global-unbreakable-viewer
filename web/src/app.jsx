@@ -203,7 +203,7 @@ function App(){
       .showAtmosphere(true).atmosphereColor('#bcd6e8').atmosphereAltitude(0.20)
       .showGraticules(true)
       .polygonsData(feats)
-      .polygonAltitude(f=>f===hoverRef.current?0.045:0.012)
+      .polygonAltitude(f=>f===hoverRef.current?0.045:0.010)  // ~on the sphere (0 would z-fight)
       .polygonCapColor(f=>featColor(f))
       .polygonSideColor(()=>'rgba(120,140,160,0.10)')
       /* countries carry no outline of their own (ec='none' in the paper maps): the white
@@ -211,7 +211,7 @@ function App(){
       .polygonStrokeColor(()=>'rgba(0,0,0,0)')
       .pathsData(paths)
       .pathPoints(d=>d.pts).pathPointLat(pt=>pt[1]).pathPointLng(pt=>pt[0])
-      .pathPointAlt(0.0125)                         // just above the country caps
+      .pathPointAlt(0.0105)                          // just above the country caps
       .pathColor(d=>d.coast?COAST_COLOR:BORDER_COLOR)
       .pathTransitionDuration(0)
       .onPolygonHover(onHover)
@@ -232,7 +232,7 @@ function App(){
 
   function onHover(f){
     hoverRef.current=f;const w=wRef.current;if(!w)return;
-    w.polygonAltitude(ff=>ff===f?0.045:0.012);
+    w.polygonAltitude(ff=>ff===f?0.045:0.010);
     const tip=document.getElementById('tip');
     if(window.innerWidth<=820){tip.style.opacity=0;return;}   // no hover tooltip on mobile / touch
     if(f){
