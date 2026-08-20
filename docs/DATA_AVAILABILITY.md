@@ -58,11 +58,6 @@ Nine response series back six lever cards: exposure & vulnerability (whole-popul
 scope), self-employment, income diversification, income equalization (gini), and PDS (post-disaster
 support / insurance).
 
-> **Note — `gini` series.** The `gini` (income-equalization) sweep currently has **no raw outputs**
-> under `simulation_output/gini/` (only empty step directories), so `process.py` omits it and the
-> "Reduce income inequality" lever does not appear. To restore it, run
-> `uv run python simulate.py --series gini` (model required), then `uv run python process.py`.
-
 ## Regenerating the data
 
 ```sh
