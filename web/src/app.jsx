@@ -219,6 +219,12 @@ function App(){
       .onGlobeClick(()=>{setSel(null);});
     try{w.globeMaterial().color.set('#9cc1da');w.globeMaterial().shininess=2;}catch(e){}
     try{const ls=w.lights()||[];ls.forEach(l=>{if(/Ambient/i.test(l.type))l.intensity=3.1;else l.intensity=0.25;});w.lights(ls);}catch(e){}
+    /* make line objects (borders/coast paths, graticules) invisible to the raycaster: they are
+       purely decorative, but THREE's default line-hit threshold (1 world unit ≈ 0.5° on the globe)
+       makes them swallow hover/click in a wide band along every border — small islands like Malta
+       sit entirely inside their own coastline's dead zone and become uninteractive */
+    const noRay=()=>{try{w.scene().traverse(o=>{if(o.isLine)o.raycast=()=>{};});}catch(e){}};
+    [0,500,1500,3000].forEach(t=>setTimeout(noRay,t));
     w.controls().autoRotate=true;w.controls().autoRotateSpeed=0.42;w.controls().enableZoom=true;
     w.pointOfView({lat:18,lng:8,altitude:2.3},0);
     wRef.current=w;
