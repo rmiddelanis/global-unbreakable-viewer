@@ -117,7 +117,6 @@ function App(){
   const [vk,setVk]=useState('resilience');
   const [sel,setSel]=useState(null);            // iso
   const [groupBy,setGroupBy]=useState('inc');   // inc | region
-  const [hiGroup,setHiGroup]=useState(null);    // highlighted group value
   const elRef=useRef(), wRef=useRef();
   const headRef=useRef(), stageRef=useRef(), sheetRef=useRef();
 
@@ -157,7 +156,6 @@ function App(){
 
   const colorFor=(c)=>{
     if(!c)return GREY;                              // not covered by the simulation
-    if(hiGroup){const g=groupBy==='inc'?c.incomeGroup:c.region; if(g!==hiGroup)return '#e6ebef';}
     return ramp(V.stops,scaleT(V.get(c)));
   };
 
@@ -255,9 +253,9 @@ function App(){
     } else {tip.style.opacity=0;}
   }
 
-  /* recolor on variable / highlight change */
+  /* recolor on variable change */
   useEffect(()=>{const w=wRef.current;if(!w)return;
-    w.polygonCapColor(f=>featColor(f));},[vk,domain,hiGroup,groupBy]);
+    w.polygonCapColor(f=>featColor(f));},[vk,domain]);
 
   /* focus camera on selection */
   useEffect(()=>{const w=wRef.current;if(!w||!sel)return;const c=byIso[sel];if(!c)return;
@@ -370,15 +368,14 @@ function App(){
           <div className="ov-sub">{countries.length} countries simulated · {data.framework}</div>
 
           <div className="grp-tabs">
-            <button className={groupBy==='inc'?'on':''} onClick={()=>{setGroupBy('inc');setHiGroup(null);}}>By income group</button>
-            <button className={groupBy==='region'?'on':''} onClick={()=>{setGroupBy('region');setHiGroup(null);}}>By region</button>
+            <button className={groupBy==='inc'?'on':''} onClick={()=>setGroupBy('inc')}>By income group</button>
+            <button className={groupBy==='region'?'on':''} onClick={()=>setGroupBy('region')}>By region</button>
           </div>
           {groups.map(g=>{
             const pos=v=>Math.max(0,Math.min(100,scaleT(v)*100));
             const lo=pos(g.loW),hi=pos(g.hiW),b1=pos(g.q1),b3=pos(g.q3),md=pos(g.med);
             return (
-            <div key={g.key} className={'barrow'+(hiGroup&&hiGroup!==g.key?' dim':'')}
-                 onClick={()=>setHiGroup(hiGroup===g.key?null:g.key)}>
+            <div key={g.key} className="barrow">
               <div className="lab"><b>{g.label}</b><span className="val mono">{V.fmt(g.med)}{V.unit==='%'?'%':' '+V.unit}</span></div>
               <div className="boxtrack">
                 <div className="axis"></div>
@@ -398,8 +395,6 @@ function App(){
             <span><i className="lg-box"></i>IQR (Q1–Q3)</span>
             <span><i className="lg-wh"></i>1.5·IQR range</span>
           </div>
-          <div className="ov-sub" style={{marginTop:8,fontSize:11,color:'var(--ink-3)'}}>{hiGroup?'Highlighted on globe — click again to clear':'Click a group to highlight it on the globe'}</div>
-
           <div className="ranklist">
             <h5>{V.bad?'Highest':'Top'} — {V.short}</h5>
             {ranked.slice(0,5).map((c,i)=><div key={c.iso} className="rank" onClick={()=>setSel(c.iso)}>
