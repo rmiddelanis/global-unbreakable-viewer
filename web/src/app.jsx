@@ -456,6 +456,7 @@ function App(){
               <a href={PAPER.url} target="_blank" rel="noopener">{PAPER.url}</a></p>
             <p className="basemap">Basemap data from <a href="http://datacatalog.worldbank.org/infrastructure-data/search/dataset/0038272/World-Bank-Official-Administrative-Boundaries"
               target="_blank" rel="noopener">The World Bank</a> under a Creative Commons license (CC BY 4.0).</p>
+            <p className="basemap">This visualizer tool has been generated with the help of AI.</p>
           </div>
         </div>}
         </aside>}
