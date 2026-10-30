@@ -6,6 +6,16 @@ const GEO_URL     = './data/wb_adm0.json';      // WB GAD country polygons (buil
 const BORDERS_URL = './data/wb_borders.json';   // boundary + coastline lines, dash styles pre-baked
 const GREY        = '#dde4ea';   // countries not covered by the simulation
 
+/* underlying paper (metadata from Crossref; online-first, no volume/pages yet) */
+const PAPER = {
+  authors: 'Middelanis, R., Jafino, B. A., Hill, R., Nguyen, M. C. & Hallegatte, S.',
+  title:   'Global socio-economic resilience to disasters',
+  journal: 'Nat. Sustain.',
+  year:    2026,
+  doi:     '10.1038/s41893-026-01947-z',
+};
+PAPER.url = 'https://doi.org/'+PAPER.doi;
+
 /* map styling ported from the paper repo's plotting.py
    (MAP_COLORS / BORDER_LINESTYLES / get_special_map_colors) */
 const COAST_COLOR  = '#4682b4';               // steelblue ocean line
@@ -80,6 +90,29 @@ function blendColors(c1,c2,t=.5){
    (manifest.method === 'emulator'); adjustedMetrics() is the single place that would dispatch. */
 const POLICY_URL='./data/policies/';
 const POL_CACHE={};
+/* explanation shown for the selected lever (wording follows the paper's "Policy options for resilience");
+   `paper` = the setting used in the paper, since the sliders span a wider range; `param` = that
+   setting on the series' param grid (per PDS variant), used as the slider's default */
+const POLICY_INFO={
+  vulnerability:{
+    text:"Lowers the country's overall vulnerability (how much of an exposed asset is destroyed when a hazard strikes) by the chosen percentage, either spread across all households or achieved entirely among the poorest 20%. In practice this means retrofitting homes, enforcing stricter building standards or improving early warning systems.",
+    paper:'5% reduction.', param:0.95},
+  exposure:{
+    text:"Lowers the country's overall exposure (how many people and assets are hit) by the chosen percentage, either spread across all households or achieved entirely among the poorest 20%. In practice this means protective infrastructure such as dikes, risk-informed land-use planning, or restoring mangroves and floodplains.",
+    paper:'5% reduction.', param:0.95},
+  self_employment:{
+    text:'Represents the promotion of formal jobs. Employees work with assets owned by their employer, so the cost of rebuilding them is spread more broadly across the economy instead of falling on the household.',
+    paper:'10% reduction.', param:0.9},
+  non_diversified_income:{
+    text:'Makes households less dependent on labour income, which is lost when local assets are destroyed. Part of labour income is shifted to diversified sources such as transfers, social protection or capital income, keeping total consumption the same.',
+    paper:'10% of labour income is shifted.', param:0.9},
+  gini:{
+    text:"Redistributes a share of every household's income evenly across the population, which lowers the country's income inequality.",
+    paper:'10% of income is redistributed.', param:0.9},
+  pds:{
+    text:'Gives affected households extra money to mitigate drops in consumption and speed up rebuilding. Post-disaster support pays every affected household the same lump sum, set as a share of the rebuilding costs faced by the poorest 20%. Insurance is a mandatory national scheme that pays a share of each affected household\'s own rebuilding costs. The cost of aid is shared across the whole population in proportion to income.',
+    paper:'40% (PDS) and 20% (insurance).', param:{uniform:0.4,proportional:0.2}},
+};
 function loadPolicy(iso){
   if(!POL_CACHE[iso])
     POL_CACHE[iso]=fetch(POLICY_URL+iso+'.json').then(r=>r.ok?r.json():null).catch(()=>null);
@@ -89,6 +122,13 @@ function loadPolicy(iso){
 function seriesId(lever,scope,variant){
   if(lever.kind==='pds')return lever.variants[variant];
   return (lever.series&&(lever.series[scope]||lever.series.all))||null;
+}
+/* step index of the paper's setting for a lever (0 = baseline if unknown / not on the grid) */
+function paperIdx(lever,series,variant){
+  const info=POLICY_INFO[lever.key]; if(!info||info.param==null||!series) return 0;
+  const p=typeof info.param==='object'?info.param[variant]:info.param;
+  const i=series.param.findIndex(v=>Math.abs(v-p)<1e-6);
+  return i<0?0:i;
 }
 /* highest reachable step index for a series (arrays carry null past the feasible range, e.g. deep
    poorest-quintile steps that the model can't solve for some countries) */
@@ -112,7 +152,7 @@ function App(){
   const [paths,setPaths]=useState(null);        // boundary + coastline polylines (wb_borders.json)
   const [data,setData]=useState(null);          // explorer_data.json
   const [byIso,setByIso]=useState({});
-  const [manifest,setManifest]=useState(null);  // data/policies/manifest.json (optional)
+  const [manifest,setManifest]=useState(undefined);  // data/policies/manifest.json (optional; undefined = loading, null = absent)
   const [err,setErr]=useState(null);
   const [vk,setVk]=useState('resilience');
   const [sel,setSel]=useState(null);            // iso
@@ -133,7 +173,7 @@ function App(){
       const pd=(bd.borders||[]).map(pts=>({pts})).concat((bd.coast||[]).map(pts=>({pts,coast:true})));
       setData(d);setByIso(bi);setFeats(fs);setPaths(pd);
       /* policy scenarios are optional: load the manifest if present, ignore if absent */
-      fetch(POLICY_URL+'manifest.json').then(r=>r.ok?r.json():null).then(m=>setManifest(m)).catch(()=>{});
+      fetch(POLICY_URL+'manifest.json').then(r=>r.ok?r.json():null).then(m=>setManifest(m)).catch(()=>setManifest(null));
     }catch(e){setErr(e.message);}
   })();},[]);
 
@@ -331,6 +371,12 @@ function App(){
           {VAR_KEYS.map(k=><button key={k} className={k===vk?'on':''} onClick={()=>setVk(k)}>{VARS[k].label}</button>)}
         </div>
         <div className="grow"></div>
+        <a className="paper-link" href={PAPER.url} target="_blank" rel="noopener"
+          title={`${PAPER.authors} ${PAPER.title}. ${PAPER.journal} (${PAPER.year}).`}>
+          <span className="pl-k">Paper</span>
+          <span className="pl-v">Middelanis et al., <i>Nature Sustainability</i> ({PAPER.year})</span>
+          <span aria-hidden="true">↗</span>
+        </a>
       </header>
 
       <div className="stage" ref={stageRef}>
@@ -403,6 +449,14 @@ function App(){
             {ranked.slice(-5).map((c,i)=><div key={c.iso} className="rank" onClick={()=>setSel(c.iso)}>
               <span className="nm"><span className="ix">{ranked.length-4+i}</span>{c.name}</span><span className="rv">{V.fmt(V.get(c))}{V.unit==='%'?'%':''}</span></div>)}
           </div>
+          <div className="cite">
+            <h5>Sources &amp; citation</h5>
+            <p>If you use these results, please cite:</p>
+            <p className="ref">{PAPER.authors} {PAPER.title}. <i>{PAPER.journal}</i> ({PAPER.year}).{' '}
+              <a href={PAPER.url} target="_blank" rel="noopener">{PAPER.url}</a></p>
+            <p className="basemap">Basemap data from <a href="http://datacatalog.worldbank.org/infrastructure-data/search/dataset/0038272/World-Bank-Official-Administrative-Boundaries"
+              target="_blank" rel="noopener">The World Bank</a> under a Creative Commons license (CC BY 4.0).</p>
+          </div>
         </div>}
         </aside>}
 
@@ -423,12 +477,12 @@ function CountryPanel({c,vk,onClose,manifest}){
   const qlabels=['Poorest','Q2','Q3','Q4','Richest'];
 
   /* single-policy what-if state (only one lever editable at a time) */
-  const [pol,setPol]=useState(null);      // this country's data/policies/<iso>.json
+  const [pol,setPol]=useState(undefined); // this country's data/policies/<iso>.json (undefined = loading, null = none)
   const [leverKey,setLeverKey]=useState(null);
   const [scope,setScope]=useState('all'); // exposure/vulnerability scope
   const [variant,setVariant]=useState('uniform'); // PDS variant
   const [idx,setIdx]=useState(0);         // step index (0 = baseline)
-  useEffect(()=>{setPol(null);setLeverKey(null);setIdx(0);setScope('all');setVariant('uniform');
+  useEffect(()=>{setPol(undefined);setLeverKey(null);setIdx(0);setScope('all');setVariant('uniform');
     let live=true;loadPolicy(c.iso).then(p=>{if(live)setPol(p);});return ()=>{live=false;};},[c.iso]);
 
   const hasSeries=(lv)=>lv.kind==='pds'
@@ -443,7 +497,10 @@ function CountryPanel({c,vk,onClose,manifest}){
   const changed=!!(lever&&S&&stepIdx>0);
   const adjusted=adjustedMetrics(c,pol,manifest,lever&&S?{sid,idx:stepIdx}:null);
 
-  const pickLever=(k)=>{setLeverKey(k);setIdx(0);};
+  /* selecting a lever (or switching PDS variant) starts the slider at the paper's setting */
+  const startIdx=(lv,v)=>paperIdx(lv,pol&&pol.series[seriesId(lv,scope,v)],v);
+  const pickLever=(k)=>{setLeverKey(k);const lv=k&&levers.find(l=>l.key===k);setIdx(lv?startIdx(lv,variant):0);};
+  const pickVariant=(v)=>{setVariant(v);if(lever)setIdx(startIdx(lever,v));};
   const param=S?S.param[stepIdx]:null;
   const effLabel=()=>{
     if(!S||stepIdx===0)return '—';
@@ -493,14 +550,20 @@ function CountryPanel({c,vk,onClose,manifest}){
       </>:<div style={{fontSize:11.5,color:'var(--ink-3)'}}>No quintile breakdown available for this country.</div>}
 
       <div className="sec-t">Policy simulation</div>
-      {(manifest&&pol&&levers.length)?(
+      {(manifest===undefined||pol===undefined)?(
+        <div className="polhint">Loading policy scenarios…</div>
+      ):(manifest&&pol&&levers.length)?(
         <div className="polbox">
           <div className="polhint">Apply a policy to see how the risk and resilience profile changes.</div>
           <div className="pol-picker">
             {levers.map(lv=><button key={lv.key} className={lv.key===leverKey?'on':''}
               onClick={()=>pickLever(lv.key===leverKey?null:lv.key)}>{lv.label}</button>)}
           </div>
-          {lever&&<>
+          {lever&&<div className="pol-info">
+            {POLICY_INFO[lever.key]&&<>
+              <p>{POLICY_INFO[lever.key].text}</p>
+              <p className="pol-info-paper">Paper: {POLICY_INFO[lever.key].paper}</p>
+            </>}
             {lever.kind!=='pds'&&lever.scopes&&lever.scopes.length>1&&
               <div className="pol-sub"><span className="pol-sub-l">Applies to</span>
                 <span className="scope-tog">
@@ -511,7 +574,7 @@ function CountryPanel({c,vk,onClose,manifest}){
               <div className="pol-sub"><span className="pol-sub-l">Aid type</span>
                 <span className="scope-tog">
                   {Object.keys(lever.variants).map(v=><button key={v} className={variant===v?'on':''}
-                    onClick={()=>setVariant(v)}>{(lever.variantLabels&&lever.variantLabels[v])||v}</button>)}
+                    onClick={()=>pickVariant(v)}>{(lever.variantLabels&&lever.variantLabels[v])||v}</button>)}
                 </span></div>}
             <div className="pol-row">
               <div className="pol-lab"><span>{lever.kind==='pds'?'Coverage':'Reduction'}</span>
@@ -521,17 +584,13 @@ function CountryPanel({c,vk,onClose,manifest}){
             </div>
             <div className="polfoot">
               <button className="pol-reset" disabled={stepIdx===0} onClick={()=>setIdx(0)}>Reset to baseline</button>
-              <span className="polnote">Country-level effect; quintile chart shows the baseline distribution.
-                {manifest.synthetic&&<><br/><b>Synthetic placeholder data</b> — run build_policy_data.py.</>}</span>
             </div>
-          </>}
+          </div>}
         </div>
       ):(
         <div className="unavail">
           <h5><span className="badge">Not available</span> Policy scenarios unavailable</h5>
-          <p>{manifest?'No pre-computed policy scenarios are bundled for this country yet.'
-            :<>Policy scenarios are not built. Run <code>build_policy_data.py</code> to pre-compute
-              them into <code>data/policies/</code>.</>}</p>
+          <p>No policy scenarios are available for this country.</p>
         </div>
       )}
     </div>
@@ -579,7 +638,9 @@ function reportHTML(title,V,rows){
   <h1>${title}</h1><div class="sub">Global Resilience Explorer · ${V.label} view · baseline simulation · generated ${new Date().toLocaleDateString()}</div>
   <table>${rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('')}</table>
   <div class="ft">Generated from the Global Unbreakable baseline simulation outputs. Socio-economic resilience is
-  the ratio of expected asset damages to expected well-being losses.</div>`;
+  the ratio of expected asset damages to expected well-being losses.<br><br>
+  Source: ${PAPER.authors} ${PAPER.title}. <i>${PAPER.journal}</i> (${PAPER.year}).
+  <a href="${PAPER.url}">${PAPER.url}</a></div>`;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
