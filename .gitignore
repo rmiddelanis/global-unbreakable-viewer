@@ -21,3 +21,6 @@ __pycache__/
 # --- web build artifact + deps (app.js is generated from web/src/app.jsx by `npm run build`) ---
 web/app.js
 web/node_modules/
+
+# --- hand-off package built by package.sh ---
+dist/

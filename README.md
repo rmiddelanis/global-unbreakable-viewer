@@ -82,6 +82,9 @@ uv run python process.py --skip-policies                 # rebuild explorer_data
 branch (default `main`). One-time: repo **Settings → Pages → Source = GitHub Actions**. Because
 `web/data/` is committed, CI needs only Node — no Python/uv.
 
+To host elsewhere (e.g. a corporate web server), `./package.sh` builds the site and writes a self-contained
+hand-off zip to `dist/` (the static files plus [`docs/HOSTING.md`](docs/HOSTING.md) for whoever publishes it).
+
 ## More
 - [`docs/DATA_AVAILABILITY.md`](docs/DATA_AVAILABILITY.md) — coverage and what is / isn't surfaced.
 - [`web/data/SCHEMA.md`](web/data/SCHEMA.md) — the JSON contract the frontend consumes.
