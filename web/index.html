@@ -266,7 +266,12 @@
       width:auto;height:auto;min-height:calc(100vh - var(--head-h,84px));
       margin-top:var(--peek);border-radius:18px 18px 0 0;z-index:5;
       box-shadow:0 -12px 40px rgba(20,32,43,.18);}
-    .ov-scroll{overflow:visible;flex:none;padding:18px 18px 44px;}
+    /* grabber bar: signals the sheet can be pulled up */
+    .sidebar::before{content:'';position:absolute;top:8px;left:50%;width:38px;height:4px;margin-left:-19px;
+      border-radius:2px;background:var(--ink-3);opacity:.4;z-index:2;pointer-events:none;}
+    .ov-scroll{overflow:visible;flex:none;padding:24px 18px 44px;}
+    .dr-head{padding-top:22px;}
+    .dr-close{top:20px;}
     .dr-body{overflow:visible;}
     .hint{display:none;}
   }
@@ -279,8 +284,8 @@
     .legend .ramp{height:8px;}
     .legend .scale{font-size:9.5px;}
   }
-  /* keep title + "?" + PAPER on one row on the narrowest phones */
-  @media (max-width:400px){
+  /* keep title + "?" + PAPER on one row on phones (label would push PAPER to its own row up to ~435px) */
+  @media (max-width:450px){
     header.bar{column-gap:10px;}
     .brand .mark{font-size:17px;}
     .about-btn{margin-left:-4px;padding:4px;}
