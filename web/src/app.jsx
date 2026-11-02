@@ -15,6 +15,10 @@ const PAPER = {
   doi:     '10.1038/s41893-026-01947-z',
 };
 PAPER.url = 'https://doi.org/'+PAPER.doi;
+const CONTACTS = [
+  {name:'Chloé Desjonqueres', email:'cdesjonqueres@worldbankgroup.org'},
+  {name:'Robin Middelanis',   email:'rmiddelanis@worldbank.org'},
+];
 
 /* map styling ported from the paper repo's plotting.py
    (MAP_COLORS / BORDER_LINESTYLES / get_special_map_colors) */
@@ -157,6 +161,9 @@ function App(){
   const [vk,setVk]=useState('resilience');
   const [sel,setSel]=useState(null);            // iso
   const [groupBy,setGroupBy]=useState('inc');   // inc | region
+  const [about,setAbout]=useState(false);       // "?" dialog: sources, contacts, AI note
+  useEffect(()=>{if(!about)return;const k=e=>{if(e.key==='Escape')setAbout(false);};
+    window.addEventListener('keydown',k);return ()=>window.removeEventListener('keydown',k);},[about]);
   const elRef=useRef(), wRef=useRef();
   const headRef=useRef(), stageRef=useRef(), sheetRef=useRef();
 
@@ -367,6 +374,8 @@ function App(){
         <div className="brand">
           <span className="mark">Global Resilience<span style={{color:'var(--ink-3)',fontWeight:500}}> Explorer</span></span>
         </div>
+        <button className="about-btn" aria-label="About: sources, citation and contacts" aria-haspopup="dialog"
+          onClick={()=>setAbout(true)}><span className="q" aria-hidden="true">?</span><span className="lbl">About</span></button>
         <div className="seg">
           {VAR_KEYS.map(k=><button key={k} className={k===vk?'on':''} onClick={()=>setVk(k)}>{VARS[k].label}</button>)}
         </div>
@@ -449,6 +458,15 @@ function App(){
             {ranked.slice(-5).map((c,i)=><div key={c.iso} className="rank" onClick={()=>setSel(c.iso)}>
               <span className="nm"><span className="ix">{ranked.length-4+i}</span>{c.name}</span><span className="rv">{V.fmt(V.get(c))}{V.unit==='%'?'%':''}</span></div>)}
           </div>
+        </div>}
+        </aside>}
+
+        {ready&&!cur&&<div className="hint">Click any simulated country on the globe to open its resilience profile</div>}
+      </div>
+
+      {about&&<div className="about-bg" onClick={()=>setAbout(false)}>
+        <div className="about" role="dialog" aria-modal="true" aria-label="About" onClick={e=>e.stopPropagation()}>
+          <button className="dr-close" aria-label="Close" autoFocus onClick={()=>setAbout(false)}>✕</button>
           <div className="cite">
             <h5>Sources &amp; citation</h5>
             <p>If you use these results, please cite:</p>
@@ -456,13 +474,15 @@ function App(){
               <a href={PAPER.url} target="_blank" rel="noopener">{PAPER.url}</a></p>
             <p className="basemap">Basemap data from <a href="http://datacatalog.worldbank.org/infrastructure-data/search/dataset/0038272/World-Bank-Official-Administrative-Boundaries"
               target="_blank" rel="noopener">The World Bank</a> under a Creative Commons license (CC BY 4.0).</p>
-            <p className="basemap">This visualizer tool has been generated with the help of AI.</p>
           </div>
-        </div>}
-        </aside>}
-
-        {ready&&!cur&&<div className="hint">Click any simulated country on the globe to open its resilience profile</div>}
-      </div>
+          <div className="cite">
+            <h5>Contacts</h5>
+            {CONTACTS.map(p=><p key={p.email} className="contact">{p.name}<br/>
+              <a href={'mailto:'+p.email}>{p.email}</a></p>)}
+          </div>
+          <p className="ai-note">This visualizer tool has been generated with the help of AI (Claude Opus 5.5).</p>
+        </div>
+      </div>}
     </div>
   );
 }
@@ -500,6 +520,9 @@ function CountryPanel({c,vk,onClose,manifest}){
 
   /* selecting a lever (or switching PDS variant) starts the slider at the paper's setting */
   const startIdx=(lv,v)=>paperIdx(lv,pol&&pol.series[seriesId(lv,scope,v)],v);
+  /* bring the selected lever's panel (description + controls) fully into view */
+  const infoRef=useRef();
+  useEffect(()=>{if(leverKey&&infoRef.current)infoRef.current.scrollIntoView({block:'nearest',behavior:'smooth'});},[leverKey]);
   const pickLever=(k)=>{setLeverKey(k);const lv=k&&levers.find(l=>l.key===k);setIdx(lv?startIdx(lv,variant):0);};
   const pickVariant=(v)=>{setVariant(v);if(lever)setIdx(startIdx(lever,v));};
   const param=S?S.param[stepIdx]:null;
@@ -529,7 +552,8 @@ function CountryPanel({c,vk,onClose,manifest}){
           return (<div key={k} className={'metric'+(k===vk?' active':'')}>
             <div className="ml">{Vk.label}</div>
             <div className="mv">{Vk.fmt(av)}<span className="u">{Vk.unit}</span></div>
-            {chg&&<div className="mbase">baseline {Vk.fmt(bv)}{Vk.unit==='%'?'%':''} <span className={((av>bv)===Vk.bad)?'dn':'up'}>{av>bv?'▲':'▼'} {Vk.fmt(Math.abs(av-bv))}</span></div>}
+            {/* the baseline line always takes its space, so cards don't resize when a policy is applied */}
+            <div className="mbase">{chg?<>baseline {Vk.fmt(bv)}{Vk.unit==='%'?'%':''} <span className={((av>bv)===Vk.bad)?'dn':'up'}>{av>bv?'▲':'▼'} {Vk.fmt(Math.abs(av-bv))}</span></>:'\u00a0'}</div>
           </div>);
         })}
       </div>
@@ -545,9 +569,6 @@ function CountryPanel({c,vk,onClose,manifest}){
           </div>
         ))}
       </div>
-      <div style={{fontSize:11,color:'var(--ink-3)',marginTop:6,lineHeight:1.4}}>
-        Income quintiles, poorest (Q1) to richest (Q5).
-      </div>
       </>:<div style={{fontSize:11.5,color:'var(--ink-3)'}}>No quintile breakdown available for this country.</div>}
 
       <div className="sec-t">Policy simulation</div>
@@ -560,7 +581,7 @@ function CountryPanel({c,vk,onClose,manifest}){
             {levers.map(lv=><button key={lv.key} className={lv.key===leverKey?'on':''}
               onClick={()=>pickLever(lv.key===leverKey?null:lv.key)}>{lv.label}</button>)}
           </div>
-          {lever&&<div className="pol-info">
+          {lever&&<div className="pol-info" ref={infoRef}>
             {POLICY_INFO[lever.key]&&<>
               <p>{POLICY_INFO[lever.key].text}</p>
               <p className="pol-info-paper">Paper: {POLICY_INFO[lever.key].paper}</p>
