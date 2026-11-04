@@ -356,7 +356,6 @@ def build_baseline():
 
     payload = {
         "generatedFrom": "simulation_output/0_baseline",
-        "framework": "Global Unbreakable model",
         "incomeOrder": INCOME_ORDER,
         "incomeLabels": INCOME_LABELS,
         "regionLabels": REGION_LABELS,

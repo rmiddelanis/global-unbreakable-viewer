@@ -54,15 +54,10 @@ const VARS={
     get:c=>c.recovery,fmt:v=>v.toFixed(1),
     desc:'Time for affected households to recover 95% of their disaster losses (population-weighted, years).'},
 };
-/* metrics that always exist per country; recovery is only shown if present in the data */
 const VAR_KEYS=Object.keys(VARS);
 
-/* quintile sub-metrics (decompose exactly to the national totals) */
-const QVARS={
-  incomeShare  :{label:'Income share', unit:'%',     stops:['#dfeaf2','#86c0ad','#1b7a5f'], get:q=>q.incomeShare,  fmt:v=>v.toFixed(0)},
-  riskWellbeing:{label:'Risk to well-being', unit:'% GDP', stops:VARS.riskWellbeing.stops, get:q=>q.riskWellbeing, fmt:v=>v.toFixed(2)},
-  riskAssets   :{label:'Risk to assets', unit:'% GDP',     stops:VARS.riskAssets.stops,    get:q=>q.riskAssets,    fmt:v=>v.toFixed(2)},
-};
+/* quintile breakdown in the country panel (income share per household quintile) */
+const QVAR={label:'Income share',unit:'%',stops:['#dfeaf2','#86c0ad','#1b7a5f'],get:q=>q.incomeShare,fmt:v=>v.toFixed(0)};
 
 /* color ramp utils */
 function hx(h){h=h.replace('#','');return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];}
@@ -348,7 +343,7 @@ function App(){
       const iqr=q3-q1;
       const loW=Math.max(vals[0],q1-1.5*iqr);
       const hiW=Math.min(vals[vals.length-1],q3+1.5*iqr);
-      return {key:k,label:lab[k],med,q1,q3,iqr,loW,hiW,n:cs.length};
+      return {key:k,label:lab[k],med,q1,q3,loW,hiW};
     });
     if(order)arr.sort((a,b)=>order.indexOf(a.key)-order.indexOf(b.key));
     else arr.sort((a,b)=>b.med-a.med);
@@ -357,14 +352,6 @@ function App(){
   const globalMedian=countries.length?quantile(countries.map(c=>V.get(c)).sort((a,b)=>a-b),0.5):0;
 
   const ranked=useMemo(()=>[...countries].sort((a,b)=>V.get(b)-V.get(a)),[countries,vk]);
-
-  /* report */
-  function downloadReport(){
-    const rows=cur?reportCountry(cur):reportGlobal(V,globalMedian,groups,ranked,groupBy,data);
-    const html=reportHTML(cur?cur.name:'Global overview',V,rows);
-    const blob=new Blob([html],{type:'text/html'});const a=document.createElement('a');
-    a.href=URL.createObjectURL(blob);a.download=`resilience-explorer-${(cur?cur.name:'global').toLowerCase().replace(/\W+/g,'-')}.html`;a.click();
-  }
 
   const ready=feats&&data;
 
@@ -394,7 +381,7 @@ function App(){
         {!ready&&!err&&<div className="loading"><div className="spinner"></div>Loading baseline simulation…</div>}
         {err&&<div className="loading"><div style={{fontSize:22}}>⚠︎</div>
           <div>{err}</div>
-          <div style={{fontSize:11.5,maxWidth:340}}>Run <code>python3 build_data.py</code> to generate the data, then serve the folder over http (e.g. <code>python3 -m http.server</code>) — opening the file directly via <code>file://</code> blocks the data fetches.</div></div>}
+          <div style={{fontSize:11.5,maxWidth:340}}>Please try reloading the page.</div></div>}
 
         {/* legend */}
         {ready&&<div className="legend">
@@ -496,7 +483,7 @@ function App(){
 function CountryPanel({c,vk,onClose,manifest}){
   const metricKeys=['riskAssets','riskConsumption','riskWellbeing','resilience']
     .concat(c.recovery!=null?['recovery']:[]);
-  const Q=QVARS.incomeShare;                 // quintile breakdown shows income share only
+  const Q=QVAR;
   const hasQuint=c.quint&&c.quint.length;
   const qvals=hasQuint?c.quint.map(Q.get):[];
   const qmax=hasQuint?Math.max(...qvals,1e-9):1;
@@ -622,52 +609,6 @@ function CountryPanel({c,vk,onClose,manifest}){
       )}
     </div>
   </>);
-}
-
-/* ---------- report builders ---------- */
-function reportCountry(c){
-  const rows=[
-    ['Region',c.regionLabel],['Income group',c.incomeLabel],
-    c.gdppc?['GDP per capita','$'+fmtNum(c.gdppc)]:null,
-    c.pop?['Population',fmtNum(c.pop)]:null,
-    c.gini!=null?['Gini index',c.gini.toFixed(1)]:null,
-    ['Risk to assets',c.riskAssets.toFixed(2)+'% GDP'],
-    ['Risk to consumption',c.riskConsumption.toFixed(2)+'% GDP'],
-    ['Risk to well-being',c.riskWellbeing.toFixed(2)+'% GDP'],
-    ['Socio-economic resilience',c.resilience.toFixed(0)+'%'],
-    c.recovery!=null?['Recovery duration',c.recovery.toFixed(1)+' yrs']:null,
-  ].filter(Boolean);
-  if(c.quint&&c.quint.length){
-    rows.push(['— Risk to well-being by income quintile (% GDP)','']);
-    const lab=['Poorest','Q2','Q3','Q4','Richest'];
-    c.quint.forEach(q=>rows.push([lab[q.q-1]+' (income '+q.incomeShare.toFixed(0)+'%)',q.riskWellbeing.toFixed(3)]));
-  }
-  return rows;
-}
-function reportGlobal(V,avg,groups,ranked,groupBy,data){
-  const rows=[['Indicator',V.label],['Global median',V.fmt(avg)+(V.unit==='%'?'%':' '+V.unit)],['Countries',ranked.length]];
-  rows.push(['— Grouped by',groupBy==='inc'?'income group':'region']);
-  groups.forEach(g=>rows.push([g.label+' (median · IQR)',
-    V.fmt(g.med)+'  ['+V.fmt(g.q1)+'–'+V.fmt(g.q3)+']'+(V.unit==='%'?'%':' '+V.unit)]));
-  rows.push(['Highest '+V.short,ranked[0].name+' ('+V.fmt(V.get(ranked[0]))+')'],
-            ['Lowest '+V.short,ranked[ranked.length-1].name+' ('+V.fmt(V.get(ranked[ranked.length-1]))+')']);
-  return rows;
-}
-function reportHTML(title,V,rows){
-  return `<!doctype html><meta charset=utf8><title>Global Resilience Explorer — ${title}</title>
-  <style>body{font-family:'IBM Plex Sans',Georgia,serif;max-width:720px;margin:48px auto;padding:0 24px;color:#16202b}
-  h1{font-family:Georgia,serif;font-size:26px;border-bottom:3px solid #0f6e63;padding-bottom:10px}
-  .sub{color:#7d8b9a;font-size:13px;margin-top:-6px}
-  table{width:100%;border-collapse:collapse;margin-top:24px}
-  td{padding:10px 4px;border-bottom:1px solid #e4e9ee;font-size:14px}
-  td:last-child{text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
-  .ft{margin-top:32px;color:#7d8b9a;font-size:12px;line-height:1.5}</style>
-  <h1>${title}</h1><div class="sub">Global Resilience Explorer · ${V.label} view · baseline simulation · generated ${new Date().toLocaleDateString()}</div>
-  <table>${rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('')}</table>
-  <div class="ft">Generated from the baseline simulation outputs. Socio-economic resilience is
-  the ratio of expected asset damages to expected well-being losses.<br><br>
-  Source: ${PAPER.authors} ${PAPER.title}. <i>${PAPER.journal}</i> (${PAPER.year}).
-  <a href="${PAPER.url}">${PAPER.url}</a></div>`;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
