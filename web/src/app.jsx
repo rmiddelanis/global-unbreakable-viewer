@@ -363,7 +363,7 @@ function App(){
     const rows=cur?reportCountry(cur):reportGlobal(V,globalMedian,groups,ranked,groupBy,data);
     const html=reportHTML(cur?cur.name:'Global overview',V,rows);
     const blob=new Blob([html],{type:'text/html'});const a=document.createElement('a');
-    a.href=URL.createObjectURL(blob);a.download=`unbreakable-${(cur?cur.name:'global').toLowerCase().replace(/\W+/g,'-')}.html`;a.click();
+    a.href=URL.createObjectURL(blob);a.download=`resilience-explorer-${(cur?cur.name:'global').toLowerCase().replace(/\W+/g,'-')}.html`;a.click();
   }
 
   const ready=feats&&data;
@@ -413,14 +413,13 @@ function App(){
         {ready&&<aside className="sidebar" ref={sheetRef}>
         {cur ? <CountryPanel c={cur} vk={vk} onClose={()=>setSel(null)} manifest={manifest}/>
         : <div className="ov-scroll">
-          <p className="ov-title">Global overview</p>
+          <p className="ov-title">Global overview<span className="ov-count">{countries.length} countries simulated</span></p>
           <select className="ov-jump" value={sel||''} onChange={e=>setSel(e.target.value||null)}>
             <option value="">Jump to country…</option>
             {[...countries].sort((a,b)=>a.name.localeCompare(b.name)).map(c=><option key={c.iso} value={c.iso}>{c.name}</option>)}
           </select>
           <p className="ov-h">Global median · {V.label}</p>
           <div className="ov-stat mono">{V.fmt(globalMedian)}<span className="u">{V.unit}</span></div>
-          <div className="ov-sub">{countries.length} countries simulated · {data.framework}</div>
 
           <div className="grp-tabs">
             <button className={groupBy==='inc'?'on':''} onClick={()=>setGroupBy('inc')}>By income group</button>
@@ -459,6 +458,12 @@ function App(){
               <span className="nm"><span className="ix">{ranked.length-4+i}</span>{c.name}</span><span className="rv">{V.fmt(V.get(c))}{V.unit==='%'?'%':''}</span></div>)}
           </div>
         </div>}
+        <footer className="partners">
+          <a href="https://www.worldbank.org" target="_blank" rel="noopener" title="The World Bank">
+            <img className="pt-wb" src="./img/logo-worldbank.png" alt="The World Bank"/></a>
+          <a href="https://www.gfdrr.org" target="_blank" rel="noopener" title="Global Facility for Disaster Reduction and Recovery">
+            <img className="pt-gf" src="./img/logo-gfdrr.png" alt="GFDRR — Global Facility for Disaster Reduction and Recovery"/></a>
+        </footer>
         </aside>}
 
         {ready&&!cur&&<div className="hint">Click any simulated country on the globe to open its resilience profile</div>}
@@ -659,7 +664,7 @@ function reportHTML(title,V,rows){
   .ft{margin-top:32px;color:#7d8b9a;font-size:12px;line-height:1.5}</style>
   <h1>${title}</h1><div class="sub">Global Resilience Explorer · ${V.label} view · baseline simulation · generated ${new Date().toLocaleDateString()}</div>
   <table>${rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('')}</table>
-  <div class="ft">Generated from the Global Unbreakable baseline simulation outputs. Socio-economic resilience is
+  <div class="ft">Generated from the baseline simulation outputs. Socio-economic resilience is
   the ratio of expected asset damages to expected well-being losses.<br><br>
   Source: ${PAPER.authors} ${PAPER.title}. <i>${PAPER.journal}</i> (${PAPER.year}).
   <a href="${PAPER.url}">${PAPER.url}</a></div>`;
