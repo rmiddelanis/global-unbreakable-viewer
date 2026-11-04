@@ -446,10 +446,8 @@ function App(){
           </div>
         </div>}
         <footer className="partners">
-          <a href="https://www.worldbank.org" target="_blank" rel="noopener" title="The World Bank">
-            <img className="pt-wb" src="./img/logo-worldbank.png" alt="The World Bank"/></a>
-          <a href="https://www.gfdrr.org" target="_blank" rel="noopener" title="Global Facility for Disaster Reduction and Recovery">
-            <img className="pt-gf" src="./img/logo-gfdrr.png" alt="GFDRR — Global Facility for Disaster Reduction and Recovery"/></a>
+          <img className="pt-wb" src="./img/logo-worldbank.png" alt="The World Bank"/>
+          <img className="pt-gf" src="./img/logo-gfdrr.png" alt="GFDRR — Global Facility for Disaster Reduction and Recovery"/>
         </footer>
         </aside>}
 
